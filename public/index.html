@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VaultCrypt - Secure Key & Cryptography Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans">
+    <header class="border-b border-gray-800 bg-gray-900 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+            <h1 class="text-xl font-bold tracking-wider text-emerald-400">VAULTCRYPT</h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="text-sm text-gray-400">WebSocket Status:</span>
+            <span id="ws-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800">Disconnected</span>
+        </div>
+    </header>
+
+    <main class="flex-grow p-6 max-w-6xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-6">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Secure Secret Generator</h2>
+                <div class="space-y-4">
+                    <div>
+                      <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Generator Type</label>
+                      <div class="grid grid-cols-2 gap-3">
+                          <button id="type-jwt" class="py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50">JWT Secret</button>
+                          <button id="type-ed25519" class="py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700">Ed25519 Keypair</button>
+                      </div>
+                    </div>
+
+                    <div id="jwt-options" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Entropy Length (Bytes)</label>
+                            <input id="jwt-length" type="number" value="64" min="32" max="512" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200" />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Output Encoding</label>
+                            <select id="jwt-format" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200">
+                                <option value="hex">Hexadecimal</option>
+                                <option value="base64">Base64</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="btn-generate" class="w-full bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold py-3 px-4 rounded transition text-sm tracking-wide uppercase">Request via WebSocket</button>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Output Log</h2>
+                <div id="output-area" class="bg-gray-950 rounded p-4 border border-gray-800 h-64 overflow-y-auto font-mono text-xs text-gray-300 space-y-2">
+                    <div class="text-gray-500">System initialized. Awaiting user action...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Ed25519 Signature Suite</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Private Key (PEM)</label>
+                        <textarea id="val-private-key" placeholder="Enter PEM Private Key" class="w-full h-24 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Payload Message</label>
+                        <input id="val-message" type="text" placeholder="Message to sign/verify" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="btn-sign" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 font-semibold py-2 px-3 rounded text-xs uppercase tracking-wider transition">Sign Message</button>
+                        <button id="btn-verify" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 font-semibold py-2 px-3 rounded text-xs uppercase tracking-wider transition">Verify Signature</button>
+                    </div>
+                    <div class="pt-2">
+                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Signature (Base64 Output/Input)</label>
+                        <textarea id="val-signature" placeholder="Generated Signature" class="w-full h-16 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Public Key (PEM - for verification)</label>
+                        <textarea id="val-public-key" placeholder="Enter PEM Public Key" class="w-full h-24 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-gray-800 bg-gray-900 px-6 py-4 text-center text-xs text-gray-500">
+        Powered by Vercel WebSockets & Hono.
+    </footer>
+
+    <script>
+        const statusEl = document.getElementById('ws-status');
+        const outputArea = document.getElementById('output-area');
+        const btnGenerate = document.getElementById('btn-generate');
+        const typeJwt = document.getElementById('type-jwt');
+        const typeEd = document.getElementById('type-ed25519');
+        const jwtOptions = document.getElementById('jwt-options');
+        const jwtLength = document.getElementById('jwt-length');
+        const jwtFormat = document.getElementById('jwt-format');
+
+        const valPrivateKey = document.getElementById('val-private-key');
+        const valPublicKey = document.getElementById('val-public-key');
+        const valMessage = document.getElementById('val-message');
+        const valSignature = document.getElementById('val-signature');
+        const btnSign = document.getElementById('btn-sign');
+        const btnVerify = document.getElementById('btn-verify');
+
+        let activeType = 'jwt';
+        let socket = null;
+
+        typeJwt.addEventListener('click', () => {
+            activeType = 'jwt';
+            typeJwt.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50';
+            typeEd.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700';
+            jwtOptions.style.display = 'block';
+        });
+
+        typeEd.addEventListener('click', () => {
+            activeType = 'ed25519';
+            typeEd.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50';
+            typeJwt.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700';
+            jwtOptions.style.display = 'none';
+        });
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            let color = 'text-gray-300';
+            if (type === 'success') color = 'text-emerald-400';
+            if (type === 'error') color = 'text-red-400';
+            if (type === 'system') color = 'text-sky-400';
+            div.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="${color}">${message}</span>`;
+            outputArea.appendChild(div);
+            outputArea.scrollTop = outputArea.scrollHeight;
+        }
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            log(`Connecting to ${wsUrl}...`, 'system');
+            socket = new WebSocket(wsUrl);
+
+            socket.addEventListener('open', () => {
+                statusEl.innerText = 'Connected';
+                statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
+                log('Secure WebSocket pipeline opened.', 'success');
+            });
+
+            socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.status === 'success') {
+                        if (data.type === 'jwt') {
+                            log(`Generated JWT Secret (${data.entropy}-bit entropy): ${data.secret}`, 'success');
+                        } else if (data.type === 'ed25519') {
+                            log('Generated Ed25519 keypair successfully.', 'success');
+                            valPrivateKey.value = data.privateKey;
+                            valPublicKey.value = data.publicKey;
+                        } else if (data.type === 'sign-ed25519') {
+                            valSignature.value = data.signature;
+                            log(`Message signature generated successfully.`, 'success');
+                        } else if (data.type === 'verify-ed25519') {
+                            if (data.valid) {
+                                log('Ed25519 Signature Verified successfully! (Valid Pair)', 'success');
+                            } else {
+                                log('Ed25519 Signature verification FAILED! (Invalid Pair)', 'error');
+                            }
+                        }
+                    } else {
+                        log(`Server Error: ${data.message}`, 'error');
+                    }
+                } catch (e) {
+                    log(`Message parsing failed: ${event.data}`, 'error');
+                }
+            });
+
+            socket.addEventListener('close', () => {
+                statusEl.innerText = 'Disconnected';
+                statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800';
+                log('WebSocket pipeline terminated. Attempting reconnect in 5s...', 'error');
+                setTimeout(connect, 5000);
+            });
+
+            socket.addEventListener('error', () => {
+                log('WebSocket error occurred.', 'error');
+            });
+        }
+
+        btnGenerate.addEventListener('click', () => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('Cannot send: WebSocket offline.', 'error');
+                return;
+            }
+            if (activeType === 'jwt') {
+                const length = parseInt(jwtLength.value) || 64;
+                const format = jwtFormat.value;
+                log(`Requesting JWT Secret generation: length=${length}, format=${format}...`, 'system');
+                socket.send(JSON.stringify({
+                    action: 'generate',
+                    type: 'jwt',
+                    length: length,
+                    format: format
+                }));
+            } else {
+                log('Requesting Ed25519 Keypair generation...', 'system');
+                socket.send(JSON.stringify({
+                    action: 'generate',
+                    type: 'ed25519'
+                }));
+            }
+        });
+
+        btnSign.addEventListener('click', () => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('Cannot sign: WebSocket offline.', 'error');
+                return;
+            }
+            const priv = valPrivateKey.value.trim();
+            const msg = valMessage.value.trim();
+            if (!priv || !msg) {
+                log('Signing requires both a Private Key and a message.', 'error');
+                return;
+            }
+            log('Sending message and private key to sign via WebSockets...', 'system');
+            socket.send(JSON.stringify({
+                action: 'sign-ed25519',
+                privateKey: priv,
+                message: msg
+            }));
+        });
+
+        btnVerify.addEventListener('click', () => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('Cannot verify: WebSocket offline.', 'error');
+                return;
+            }
+            const pub = valPublicKey.value.trim();
+            const msg = valMessage.value.trim();
+            const sig = valSignature.value.trim();
+            if (!pub || !msg || !sig) {
+                log('Verification requires Public Key, Message, and Signature.', 'error');
+                return;
+            }
+            log('Sending payload signature for verification...', 'system');
+            socket.send(JSON.stringify({
+                action: 'verify-ed25519',
+                publicKey: pub,
+                message: msg,
+                signature: sig
+            }));
+        });
+
+        connect();
+    </script>
+</body>
+</html>
