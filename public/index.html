@@ -1,258 +1,165 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VaultCrypt - Secure Key & Cryptography Engine</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cipher Ledger — JWT secret &amp; Ed25519 key generator</title>
+  <meta name="description" content="Generate JWT signing secrets and Ed25519 keypairs over an authenticated wss:// channel, with entropy and validation shown at every step." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans">
-    <header class="border-b border-gray-800 bg-gray-900 px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center space-x-3">
-            <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-            <h1 class="text-xl font-bold tracking-wider text-emerald-400">VAULTCRYPT</h1>
+<body>
+
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="wordmark">
+      <span class="wordmark-glyph">§</span>
+      <div>
+        <div class="wordmark-title">Cipher Ledger</div>
+        <div class="wordmark-sub">wss:// key &amp; secret generator</div>
+      </div>
+    </div>
+    <div class="conn" id="conn-status" data-state="connecting">
+      <span class="conn-dot"></span>
+      <span class="conn-label">connecting…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Entropy, observed</p>
+      <h1>Every secret here is drawn<br />from a stream you can watch.</h1>
+      <p class="hero-copy">
+        Cipher Ledger generates JWT signing secrets and Ed25519 keypairs on a
+        short‑lived function reached only over an encrypted <code>wss://</code>
+        connection. Nothing is written to disk. Nothing is logged. Each key is
+        checked against its own signature before it's ever shown to you.
+      </p>
+      <div class="entropy-pool" aria-hidden="true">
+        <canvas id="entropy-canvas"></canvas>
+        <div class="entropy-label">live entropy sample — 256 bytes/s</div>
+      </div>
+    </section>
+
+    <section class="ledger-grid">
+
+      <article class="card" id="card-jwt">
+        <header class="card-head">
+          <h2>Shared secret</h2>
+          <span class="card-tag">HS256 / HS384 / HS512</span>
+        </header>
+        <p class="card-copy">
+          A symmetric secret for signing and verifying JWTs with HMAC.
+          Both issuer and verifier hold the same value — keep it out of
+          source control.
+        </p>
+
+        <div class="field-row">
+          <label for="jwt-length">Length</label>
+          <input type="range" id="jwt-length" min="16" max="128" step="8" value="64" />
+          <span class="field-value"><span id="jwt-length-bytes">64</span>&nbsp;bytes / <span id="jwt-length-bits">512</span>&nbsp;bits</span>
         </div>
-        <div class="flex items-center space-x-2">
-            <span class="text-sm text-gray-400">WebSocket Status:</span>
-            <span id="ws-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800">Disconnected</span>
+
+        <div class="field-row">
+          <label for="jwt-encoding">Encoding</label>
+          <select id="jwt-encoding">
+            <option value="base64url" selected>base64url</option>
+            <option value="base64">base64</option>
+            <option value="hex">hex</option>
+          </select>
         </div>
-    </header>
 
-    <main class="flex-grow p-6 max-w-6xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="space-y-6">
-            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
-                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Secure Secret Generator</h2>
-                <div class="space-y-4">
-                    <div>
-                      <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Generator Type</label>
-                      <div class="grid grid-cols-2 gap-3">
-                          <button id="type-jwt" class="py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50">JWT Secret</button>
-                          <button id="type-ed25519" class="py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700">Ed25519 Keypair</button>
-                      </div>
-                    </div>
+        <button class="generate-btn" id="btn-gen-jwt">Request secret</button>
 
-                    <div id="jwt-options" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Entropy Length (Bytes)</label>
-                            <input id="jwt-length" type="number" value="64" min="32" max="512" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200" />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium uppercase text-gray-400 mb-2">Output Encoding</label>
-                            <select id="jwt-format" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200">
-                                <option value="hex">Hexadecimal</option>
-                                <option value="base64">Base64</option>
-                            </select>
-                        </div>
-                    </div>
+        <div class="result" id="result-jwt" hidden>
+          <div class="result-row">
+            <span class="strength-badge" id="jwt-strength">—</span>
+            <span class="result-label">JWT_SECRET</span>
+          </div>
+          <div class="secret-box">
+            <code id="jwt-secret-value"></code>
+            <button class="icon-btn" data-copy-target="jwt-secret-value" aria-label="Copy secret">copy</button>
+          </div>
+          <div class="result-actions">
+            <button class="text-btn" id="btn-download-env">download .env</button>
+          </div>
+        </div>
+      </article>
 
-                    <button id="btn-generate" class="w-full bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold py-3 px-4 rounded transition text-sm tracking-wide uppercase">Request via WebSocket</button>
-                </div>
+      <article class="card" id="card-ed25519">
+        <header class="card-head">
+          <h2>Ed25519 keypair</h2>
+          <span class="card-tag">EdDSA</span>
+        </header>
+        <p class="card-copy">
+          An asymmetric keypair for signing JWTs with EdDSA. Only the
+          public key needs to reach the verifier — the private key never
+          has to leave this machine again after you save it.
+        </p>
+
+        <button class="generate-btn" id="btn-gen-ed25519">Request keypair</button>
+
+        <div class="result" id="result-ed25519" hidden>
+          <div class="result-row">
+            <span class="strength-badge strength-badge--ok" id="ed-selftest">verifying…</span>
+            <span class="result-label" id="ed-fingerprint"></span>
+          </div>
+
+          <div class="key-block">
+            <div class="key-block-head">
+              <span>Public key</span>
+              <button class="icon-btn" data-copy-target="ed-public-value" aria-label="Copy public key">copy</button>
             </div>
+            <code id="ed-public-value" class="key-pre"></code>
+          </div>
 
-            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
-                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Output Log</h2>
-                <div id="output-area" class="bg-gray-950 rounded p-4 border border-gray-800 h-64 overflow-y-auto font-mono text-xs text-gray-300 space-y-2">
-                    <div class="text-gray-500">System initialized. Awaiting user action...</div>
-                </div>
+          <div class="key-block">
+            <div class="key-block-head">
+              <span>Private key</span>
+              <button class="icon-btn" data-copy-target="ed-private-value" aria-label="Copy private key">copy</button>
             </div>
+            <code id="ed-private-value" class="key-pre key-pre--private"></code>
+          </div>
+
+          <div class="result-actions">
+            <button class="text-btn" id="btn-download-pub">download public .pem</button>
+            <button class="text-btn" id="btn-download-priv">download private .pem</button>
+            <button class="text-btn" id="btn-download-jwk">download public .jwk</button>
+          </div>
         </div>
+      </article>
 
-        <div class="space-y-6">
-            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
-                <h2 class="text-lg font-semibold text-emerald-400 mb-4">Ed25519 Signature Suite</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Private Key (PEM)</label>
-                        <textarea id="val-private-key" placeholder="Enter PEM Private Key" class="w-full h-24 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Payload Message</label>
-                        <input id="val-message" type="text" placeholder="Message to sign/verify" class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-gray-200" />
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="btn-sign" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 font-semibold py-2 px-3 rounded text-xs uppercase tracking-wider transition">Sign Message</button>
-                        <button id="btn-verify" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 font-semibold py-2 px-3 rounded text-xs uppercase tracking-wider transition">Verify Signature</button>
-                    </div>
-                    <div class="pt-2">
-                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Signature (Base64 Output/Input)</label>
-                        <textarea id="val-signature" placeholder="Generated Signature" class="w-full h-16 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium uppercase text-gray-400 mb-1">Public Key (PEM - for verification)</label>
-                        <textarea id="val-public-key" placeholder="Enter PEM Public Key" class="w-full h-24 bg-gray-950 border border-gray-800 rounded p-2 text-xs font-mono focus:outline-none focus:border-emerald-500 text-gray-200"></textarea>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
+    </section>
 
-    <footer class="border-t border-gray-800 bg-gray-900 px-6 py-4 text-center text-xs text-gray-500">
-        Powered by Vercel WebSockets & Hono.
-    </footer>
+    <section class="log-section">
+      <div class="log-head">
+        <h2>Protocol log</h2>
+        <p>The raw messages exchanged over the <code>wss://</code> connection, in order.</p>
+      </div>
+      <div class="log" id="protocol-log">
+        <div class="log-empty" id="log-empty">No entries yet — generate a secret or keypair to see the exchange.</div>
+      </div>
+    </section>
 
-    <script>
-        const statusEl = document.getElementById('ws-status');
-        const outputArea = document.getElementById('output-area');
-        const btnGenerate = document.getElementById('btn-generate');
-        const typeJwt = document.getElementById('type-jwt');
-        const typeEd = document.getElementById('type-ed25519');
-        const jwtOptions = document.getElementById('jwt-options');
-        const jwtLength = document.getElementById('jwt-length');
-        const jwtFormat = document.getElementById('jwt-format');
+    <section class="notes">
+      <h2>How this is actually secure</h2>
+      <ul>
+        <li>The connection is <strong>wss://</strong> — TLS-encrypted WebSocket — so nothing on the wire is readable in transit.</li>
+        <li>Generation happens with Node's <code>crypto</code> module on a serverless function that holds no state between connections.</li>
+        <li>Every Ed25519 keypair is signature-tested against itself server-side <em>before</em> it's returned — a keypair that can't sign and verify a nonce is never shown to you.</li>
+        <li>Nothing is persisted. Closing this tab is the same as the key never having existed on this server.</li>
+        <li>Treat this as a convenience tool, not a vault: for production secrets, generate on a machine you trust and store them in a proper secrets manager.</li>
+      </ul>
+    </section>
+  </main>
 
-        const valPrivateKey = document.getElementById('val-private-key');
-        const valPublicKey = document.getElementById('val-public-key');
-        const valMessage = document.getElementById('val-message');
-        const valSignature = document.getElementById('val-signature');
-        const btnSign = document.getElementById('btn-sign');
-        const btnVerify = document.getElementById('btn-verify');
+  <footer class="foot">
+    <span>Cipher Ledger — static frontend, generation over <code>wss://</code> Vercel Functions.</span>
+  </footer>
 
-        let activeType = 'jwt';
-        let socket = null;
-
-        typeJwt.addEventListener('click', () => {
-            activeType = 'jwt';
-            typeJwt.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50';
-            typeEd.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700';
-            jwtOptions.style.display = 'block';
-        });
-
-        typeEd.addEventListener('click', () => {
-            activeType = 'ed25519';
-            typeEd.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-emerald-950/40 text-emerald-400 border-emerald-500/50';
-            typeJwt.className = 'py-2.5 px-4 rounded border text-sm font-medium transition bg-gray-800/50 text-gray-400 border-gray-700';
-            jwtOptions.style.display = 'none';
-        });
-
-        function log(message, type = 'info') {
-            const div = document.createElement('div');
-            const time = new Date().toLocaleTimeString();
-            let color = 'text-gray-300';
-            if (type === 'success') color = 'text-emerald-400';
-            if (type === 'error') color = 'text-red-400';
-            if (type === 'system') color = 'text-sky-400';
-            div.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="${color}">${message}</span>`;
-            outputArea.appendChild(div);
-            outputArea.scrollTop = outputArea.scrollHeight;
-        }
-
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-            log(`Connecting to ${wsUrl}...`, 'system');
-            socket = new WebSocket(wsUrl);
-
-            socket.addEventListener('open', () => {
-                statusEl.innerText = 'Connected';
-                statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
-                log('Secure WebSocket pipeline opened.', 'success');
-            });
-
-            socket.addEventListener('message', (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.status === 'success') {
-                        if (data.type === 'jwt') {
-                            log(`Generated JWT Secret (${data.entropy}-bit entropy): ${data.secret}`, 'success');
-                        } else if (data.type === 'ed25519') {
-                            log('Generated Ed25519 keypair successfully.', 'success');
-                            valPrivateKey.value = data.privateKey;
-                            valPublicKey.value = data.publicKey;
-                        } else if (data.type === 'sign-ed25519') {
-                            valSignature.value = data.signature;
-                            log(`Message signature generated successfully.`, 'success');
-                        } else if (data.type === 'verify-ed25519') {
-                            if (data.valid) {
-                                log('Ed25519 Signature Verified successfully! (Valid Pair)', 'success');
-                            } else {
-                                log('Ed25519 Signature verification FAILED! (Invalid Pair)', 'error');
-                            }
-                        }
-                    } else {
-                        log(`Server Error: ${data.message}`, 'error');
-                    }
-                } catch (e) {
-                    log(`Message parsing failed: ${event.data}`, 'error');
-                }
-            });
-
-            socket.addEventListener('close', () => {
-                statusEl.innerText = 'Disconnected';
-                statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800';
-                log('WebSocket pipeline terminated. Attempting reconnect in 5s...', 'error');
-                setTimeout(connect, 5000);
-            });
-
-            socket.addEventListener('error', () => {
-                log('WebSocket error occurred.', 'error');
-            });
-        }
-
-        btnGenerate.addEventListener('click', () => {
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                log('Cannot send: WebSocket offline.', 'error');
-                return;
-            }
-            if (activeType === 'jwt') {
-                const length = parseInt(jwtLength.value) || 64;
-                const format = jwtFormat.value;
-                log(`Requesting JWT Secret generation: length=${length}, format=${format}...`, 'system');
-                socket.send(JSON.stringify({
-                    action: 'generate',
-                    type: 'jwt',
-                    length: length,
-                    format: format
-                }));
-            } else {
-                log('Requesting Ed25519 Keypair generation...', 'system');
-                socket.send(JSON.stringify({
-                    action: 'generate',
-                    type: 'ed25519'
-                }));
-            }
-        });
-
-        btnSign.addEventListener('click', () => {
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                log('Cannot sign: WebSocket offline.', 'error');
-                return;
-            }
-            const priv = valPrivateKey.value.trim();
-            const msg = valMessage.value.trim();
-            if (!priv || !msg) {
-                log('Signing requires both a Private Key and a message.', 'error');
-                return;
-            }
-            log('Sending message and private key to sign via WebSockets...', 'system');
-            socket.send(JSON.stringify({
-                action: 'sign-ed25519',
-                privateKey: priv,
-                message: msg
-            }));
-        });
-
-        btnVerify.addEventListener('click', () => {
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                log('Cannot verify: WebSocket offline.', 'error');
-                return;
-            }
-            const pub = valPublicKey.value.trim();
-            const msg = valMessage.value.trim();
-            const sig = valSignature.value.trim();
-            if (!pub || !msg || !sig) {
-                log('Verification requires Public Key, Message, and Signature.', 'error');
-                return;
-            }
-            log('Sending payload signature for verification...', 'system');
-            socket.send(JSON.stringify({
-                action: 'verify-ed25519',
-                publicKey: pub,
-                message: msg,
-                signature: sig
-            }));
-        });
-
-        connect();
-    </script>
+  <script src="/app.js"></script>
 </body>
 </html>
