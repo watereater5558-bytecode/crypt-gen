@@ -2,9 +2,6 @@
   "name": "vercel-secure-crypto-generator",
   "version": "1.0.0",
   "main": "api/ws.ts",
-  "scripts": {
-    "build": "tsc"
-  },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
