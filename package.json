@@ -2,20 +2,18 @@
   "name": "jwt-crypto-vault",
   "version": "1.0.0",
   "private": true,
-  "description": "Static JWT secret + Ed25519 keypair generator with a Hono backend on Vercel Functions.",
+  "description": "Static JWT secret + Ed25519 keypair generator with a wss:// generation backend on Vercel Functions.",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo \"static site, nothing to build\"",
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.10",
-    "hono": "^4.12.30",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.5.13",
     "typescript": "^5.7.2",
     "vercel": "^37.0.0"
   }

@@ -1,7 +1,6 @@
+import http from 'node:http';
 import crypto from 'node:crypto';
-import { serve, upgradeWebSocket } from '@hono/node-server';
-import { Hono } from 'hono';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 
 // ---------------------------------------------------------------------------
 // Protocol
@@ -36,10 +35,6 @@ interface GenerateRequest {
   encoding?: unknown;
 }
 
-interface WsSender {
-  send: (data: string) => void;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -48,8 +43,10 @@ function safeId(id: unknown): string {
   return typeof id === 'string' && id.length <= 64 ? id : crypto.randomUUID();
 }
 
-function send(ws: WsSender, payload: Record<string, unknown>) {
-  ws.send(JSON.stringify(payload));
+function send(ws: WebSocket, payload: Record<string, unknown>) {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
 }
 
 function classifyStrength(entropyBits: number): 'weak' | 'adequate' | 'strong' | 'excellent' {
@@ -104,109 +101,90 @@ function generateEd25519() {
   };
 }
 
-function handleMessage(ws: WsSender, raw: string, requestTimestamps: number[]) {
-  const now = Date.now();
-  const recent = requestTimestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  requestTimestamps.length = 0;
-  requestTimestamps.push(...recent);
-
-  if (requestTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    send(ws, { type: 'error', message: 'Rate limit exceeded. Slow down and try again.' });
-    return;
-  }
-  requestTimestamps.push(now);
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    send(ws, { type: 'error', message: 'Invalid JSON payload.' });
-    return;
-  }
-
-  if (!isPlainObject(parsed) || typeof parsed.type !== 'string') {
-    send(ws, { type: 'error', message: 'Payload must be an object with a "type" field.' });
-    return;
-  }
-
-  const req: GenerateRequest = {
-    type: parsed.type as GenerateRequest['type'],
-    id: parsed.id,
-    length: parsed.length,
-    encoding: parsed.encoding,
-  };
-  const id = safeId(req.id);
-
-  try {
-    switch (req.type) {
-      case 'ping': {
-        send(ws, { type: 'pong', id });
-        break;
-      }
-
-      case 'jwt-secret': {
-        let length = typeof req.length === 'number' ? Math.trunc(req.length) : DEFAULT_SECRET_BYTES;
-        if (!Number.isFinite(length)) length = DEFAULT_SECRET_BYTES;
-        length = Math.min(Math.max(length, MIN_SECRET_BYTES), MAX_SECRET_BYTES);
-
-        const encoding = ALLOWED_ENCODINGS.has(req.encoding as string)
-          ? (req.encoding as 'hex' | 'base64' | 'base64url')
-          : 'base64url';
-
-        const result = generateJwtSecret(length, encoding);
-        send(ws, { type: 'jwt-secret-result', id, ...result });
-        break;
-      }
-
-      case 'ed25519': {
-        const result = generateEd25519();
-        send(ws, { type: 'ed25519-result', id, ...result });
-        break;
-      }
-
-      default: {
-        send(ws, { type: 'error', id, message: `Unknown request type: "${req.type}"` });
-      }
-    }
-  } catch (err) {
-    send(ws, {
-      type: 'error',
-      id,
-      message: err instanceof Error ? err.message : 'Generation failed.',
-    });
-  }
-}
-
-const app = new Hono();
-
-app.get('/', (c) => c.text('Not found', 404));
-
-// Mount on both paths: client hits /ws (rewrite), function path is /api/ws.
-const wsRoute = upgradeWebSocket(() => {
-  const requestTimestamps: number[] = [];
-
-  return {
-    onOpen(_event, ws) {
-      send(ws, {
-        type: 'connected',
-        message: 'Secure channel established. Nothing sent here is logged or persisted.',
-      });
-    },
-    onMessage(event, ws) {
-      const raw = typeof event.data === 'string' ? event.data : String(event.data);
-      handleMessage(ws, raw, requestTimestamps);
-    },
-  };
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/plain' });
+  res.end('wss endpoint - connect with a WebSocket client');
 });
 
-app.get('/ws', wsRoute);
-app.get('/api/ws', wsRoute);
+const wss = new WebSocketServer({ server });
 
-const wss = new WebSocketServer({ noServer: true });
+wss.on('connection', (ws) => {
+  let requestTimestamps: number[] = [];
 
-const server = serve({
-  fetch: app.fetch,
-  websocket: { server: wss },
+  send(ws, {
+    type: 'connected',
+    message: 'Secure channel established. Nothing sent here is logged or persisted.',
+  });
+
+  ws.on('message', (data: RawData) => {
+    const now = Date.now();
+    requestTimestamps = requestTimestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    if (requestTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+      send(ws, { type: 'error', message: 'Rate limit exceeded. Slow down and try again.' });
+      return;
+    }
+    requestTimestamps.push(now);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data.toString());
+    } catch {
+      send(ws, { type: 'error', message: 'Invalid JSON payload.' });
+      return;
+    }
+
+    if (!isPlainObject(parsed) || typeof parsed.type !== 'string') {
+      send(ws, { type: 'error', message: 'Payload must be an object with a "type" field.' });
+      return;
+    }
+
+    const req: GenerateRequest = {
+      type: parsed.type as GenerateRequest['type'],
+      id: parsed.id,
+      length: parsed.length,
+      encoding: parsed.encoding,
+    };
+    const id = safeId(req.id);
+
+    try {
+      switch (req.type) {
+        case 'ping': {
+          send(ws, { type: 'pong', id });
+          break;
+        }
+
+        case 'jwt-secret': {
+          let length = typeof req.length === 'number' ? Math.trunc(req.length) : DEFAULT_SECRET_BYTES;
+          if (!Number.isFinite(length)) length = DEFAULT_SECRET_BYTES;
+          length = Math.min(Math.max(length, MIN_SECRET_BYTES), MAX_SECRET_BYTES);
+
+          const encoding = ALLOWED_ENCODINGS.has(req.encoding as string)
+            ? (req.encoding as 'hex' | 'base64' | 'base64url')
+            : 'base64url';
+
+          const result = generateJwtSecret(length, encoding);
+          send(ws, { type: 'jwt-secret-result', id, ...result });
+          break;
+        }
+
+        case 'ed25519': {
+          const result = generateEd25519();
+          send(ws, { type: 'ed25519-result', id, ...result });
+          break;
+        }
+
+        default: {
+          send(ws, { type: 'error', id, message: `Unknown request type: "${req.type}"` });
+        }
+      }
+    } catch (err) {
+      send(ws, {
+        type: 'error',
+        id,
+        message: err instanceof Error ? err.message : 'Generation failed.',
+      });
+    }
+  });
 });
 
 export default server;

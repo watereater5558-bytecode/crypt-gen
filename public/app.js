@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Live channel — reconnect with exponential backoff
+// wss:// connection, with reconnect + exponential backoff
 // ---------------------------------------------------------------------------
 
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -21,7 +21,7 @@ function connect() {
 
   socket.addEventListener('open', () => {
     reconnectDelay = 1000;
-    setConnState('open', 'live');
+    setConnState('open', 'live · wss://');
   });
 
   socket.addEventListener('message', (event) => {
