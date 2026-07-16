@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cipher Ledger — JWT secret &amp; Ed25519 key generator</title>
-  <meta name="description" content="Generate JWT signing secrets and Ed25519 keypairs over an authenticated wss:// channel, with entropy and validation shown at every step." />
+  <meta name="description" content="Generate JWT signing secrets and Ed25519 keypairs with entropy and validation shown at every step." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -19,7 +19,7 @@
       <span class="wordmark-glyph">§</span>
       <div>
         <div class="wordmark-title">Cipher Ledger</div>
-        <div class="wordmark-sub">wss:// key &amp; secret generator</div>
+        <div class="wordmark-sub">key &amp; secret generator</div>
       </div>
     </div>
     <div class="conn" id="conn-status" data-state="connecting">
@@ -34,9 +34,9 @@
       <h1>Every secret here is drawn<br />from a stream you can watch.</h1>
       <p class="hero-copy">
         Cipher Ledger generates JWT signing secrets and Ed25519 keypairs on a
-        short‑lived function reached only over an encrypted <code>wss://</code>
-        connection. Nothing is written to disk. Nothing is logged. Each key is
-        checked against its own signature before it's ever shown to you.
+        short‑lived, encrypted channel. Nothing is written to disk. Nothing is
+        logged. Each key is checked against its own signature before it's ever
+        shown to you.
       </p>
       <div class="entropy-pool" aria-hidden="true">
         <canvas id="entropy-canvas"></canvas>
@@ -136,8 +136,8 @@
 
     <section class="log-section">
       <div class="log-head">
-        <h2>Protocol log</h2>
-        <p>The raw messages exchanged over the <code>wss://</code> connection, in order.</p>
+        <h2>Activity log</h2>
+        <p>Messages exchanged during generation, in order.</p>
       </div>
       <div class="log" id="protocol-log">
         <div class="log-empty" id="log-empty">No entries yet — generate a secret or keypair to see the exchange.</div>
@@ -147,7 +147,7 @@
     <section class="notes">
       <h2>How this is actually secure</h2>
       <ul>
-        <li>The connection is <strong>wss://</strong> — TLS-encrypted WebSocket — so nothing on the wire is readable in transit.</li>
+        <li>Traffic is encrypted in transit — nothing on the wire is readable.</li>
         <li>Generation happens with Node's <code>crypto</code> module on a serverless function that holds no state between connections.</li>
         <li>Every Ed25519 keypair is signature-tested against itself server-side <em>before</em> it's returned — a keypair that can't sign and verify a nonce is never shown to you.</li>
         <li>Nothing is persisted. Closing this tab is the same as the key never having existed on this server.</li>
@@ -157,7 +157,7 @@
   </main>
 
   <footer class="foot">
-    <span>Cipher Ledger — static frontend, generation over <code>wss://</code> Vercel Functions.</span>
+    <span>Cipher Ledger — static frontend, server-side generation.</span>
   </footer>
 
   <script src="/app.js"></script>

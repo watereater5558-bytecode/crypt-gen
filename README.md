@@ -2,14 +2,15 @@
 
 A static site for generating **JWT signing secrets** (HS256/384/512) and
 **Ed25519 keypairs** (EdDSA), where the actual generation happens on a
-Vercel Function reached over an encrypted `wss://` connection.
+Hono WebSocket endpoint (Vercel Function) reached over an encrypted
+`wss://` connection.
 
 ## How it's structured
 
 ```
 .
 ├── api/
-│   └── ws.ts        WebSocket function — generates, validates, self-tests
+│   └── ws.ts        Hono + upgradeWebSocket — generates, validates, self-tests
 ├── public/
 │   ├── index.html   markup
 │   ├── style.css    design system
