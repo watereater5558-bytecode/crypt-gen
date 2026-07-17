@@ -1,20 +1,34 @@
 {
-  "name": "jwt-crypto-vault",
+  "name": "cryptgen",
   "version": "1.0.0",
   "private": true,
-  "description": "Static JWT secret + Ed25519 keypair generator with a wss:// generation backend on Vercel Functions.",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "echo \"static site, nothing to build\"",
-    "deploy": "vercel --prod"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "lucide-react": "^0.475.0",
+    "hash-wasm": "^4.11.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "@types/ws": "^8.5.13",
     "typescript": "^5.7.2",
-    "vercel": "^37.0.0"
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^3.4.13",
+    "postcss": "^8.4.47",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.14.0",
+    "eslint-config-next": "^16.0.0",
+    "@eslint/eslintrc": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }

@@ -1,95 +1,81 @@
-# Cipher Ledger
+# CryptGen
 
-A static site for generating **JWT signing secrets** (HS256/384/512) and
-**Ed25519 keypairs** (EdDSA), where the actual generation happens on a
-Vercel Function reached over an encrypted `wss://` connection.
+A static, client-only cryptographic toolkit. Every key, hash, and secret is generated inside the browser using the native Web Crypto API and WebAssembly (`hash-wasm` for Argon2id). The app makes no network requests, has no backend, and ships with a Content Security Policy that blocks outbound data fetching.
 
-## How it's structured
+## Modules
 
-```
-.
-├── api/
-│   └── ws.ts        WebSocket function — generates, validates, self-tests
-├── public/
-│   ├── index.html   markup
-│   ├── style.css    design system
-│   └── app.js       wss:// client, entropy canvas, copy/download helpers
-├── package.json
-├── vercel.json      rewrites /ws -> /api/ws, sets function maxDuration
-└── tsconfig.json
-```
+- **Password Generator** — adjustable length (8–128), character-set toggles, live entropy meter
+- **AES-256-GCM** — client-side authenticated encryption/decryption with hex or base64 output
+- **Argon2id** — memory-hard hashing via WebAssembly with adjustable salt, iterations, memory cost, and parallelism
+- **Ed25519** — one-click keypair generation via `crypto.subtle`, hex-encoded output
+- **SHA-256** — real-time digesting as you type
+- **Secret Generator** — high-entropy values for JWT/session secrets in hex, base64, or base64url
 
-## Run locally
+## Tech stack
+
+- Next.js (App Router, static export) + React
+- TypeScript in strict mode
+- Tailwind CSS
+- lucide-react
+- hash-wasm (Argon2id)
+
+## Getting started
 
 ```bash
 npm install
-npm run dev        # vercel dev — serves the static site + /api/ws together
+npm run dev
 ```
 
-Open the printed localhost URL. The connection indicator in the top bar
-turns teal once the WebSocket handshake to `/ws` succeeds.
+Open `http://localhost:3000`.
 
-## Deploy to Vercel
+## Building for production
 
 ```bash
-npm install -g vercel   # if you don't have it
-vercel                  # first deploy, follow the prompts
-vercel --prod            # promote to production
+npm run build
 ```
 
-WebSockets on Vercel Functions require **Fluid compute**, which is the
-default for any project created after April 23, 2025. If you're deploying
-into an older project, enable Fluid compute in the project's Vercel
-dashboard settings first, or the `/ws` upgrade request will fail.
+`output: 'export'` in `next.config.mjs` produces a fully static site in `out/`, ready for any static host.
 
-## Protocol
+## Deploying to Vercel
 
-Client and server exchange small JSON messages over the socket:
+1. Push this repository to Git and import it in Vercel, or run `vercel deploy` from this directory.
+2. Vercel detects the Next.js static export automatically. No environment variables or backend services are required.
+3. `vercel.json` ships a strict `Content-Security-Policy` and companion security headers that Vercel applies to every response. Static exports cannot set headers from `next.config.mjs`, so `vercel.json` is the source of truth for these headers on Vercel.
 
-```jsonc
-// -> server
-{ "type": "jwt-secret", "id": "…", "length": 64, "encoding": "base64url" }
-{ "type": "ed25519", "id": "…" }
-{ "type": "ping", "id": "…" }
+## Content Security Policy
 
-// -> client
-{ "type": "jwt-secret-result", "id": "…", "secret": "…", "lengthBytes": 64, "entropyBits": 512, "strength": "excellent", "encoding": "base64url" }
-{ "type": "ed25519-result", "id": "…", "publicKeyPem": "…", "privateKeyPem": "…", "publicKeyJwk": {…}, "fingerprint": "sha256:…" }
-{ "type": "error", "id": "…", "message": "…" }
+The shipped policy is intentionally restrictive:
+
+```
+default-src 'self';
+script-src 'self' 'wasm-unsafe-eval';
+style-src 'self';
+img-src 'self' data:;
+font-src 'self' data:;
+connect-src 'none';
+worker-src 'self';
+object-src 'none';
+base-uri 'none';
+form-action 'none';
+frame-ancestors 'none';
+manifest-src 'self';
+upgrade-insecure-requests
 ```
 
-Every inbound message is validated before use: `type` must be a known
-string, `length` is clamped to 16–512 bytes, and `encoding` is checked
-against an allow-list (`hex` / `base64` / `base64url`) rather than trusted
-as-is. A per-connection rate limit (5 requests/second) is enforced in the
-function.
+- `connect-src 'none'` blocks every outbound `fetch`, `XHR`, `WebSocket`, and `sendBeacon` call, so generated secrets have no network path to leave the browser, even if a future dependency attempted to phone home.
+- `script-src 'self' 'wasm-unsafe-eval'` allows the app's own bundled scripts and permits WebAssembly compilation for Argon2id, without allowing inline or third-party scripts.
+- `object-src 'none'`, `base-uri 'none'`, and `form-action 'none'` close common injection and exfiltration vectors.
+- `frame-ancestors 'none'` prevents the app from being embedded and clickjacked.
 
-## What "ultra-secure" actually means here — and its limits
+If you deploy to a static host other than Vercel, replicate these headers at that host's edge/CDN layer, or add a `<meta http-equiv="Content-Security-Policy">` tag in `app/layout.tsx` as a fallback (note that `frame-ancestors` and most `Strict-Transport-Security`-style guarantees cannot be enforced via a meta tag and require real HTTP headers).
 
-- **In transit:** the connection is `wss://`, i.e. a WebSocket upgraded
-  over TLS. Traffic between your browser and the function is encrypted.
-- **At generation:** secrets and keys are produced with Node's built-in
-  `crypto` module (`crypto.randomBytes`, `crypto.generateKeyPairSync`),
-  not a custom RNG.
-- **Before you ever see a keypair:** the function signs and verifies a
-  random nonce with the freshly generated Ed25519 key *server-side* and
-  only returns the key if that self-test passes. The browser then
-  independently re-imports the key via the Web Crypto API and repeats the
-  sign/verify check, where supported — you can watch both checks happen
-  in the protocol log.
-- **At rest:** the function holds no database and no file writes — once
-  the connection closes, the server has nothing left referencing the key.
+## Memory safety
 
-What this tool is **not**: a hardware security module or a secrets
-manager. The private key and secret do pass through the serverless
-function's memory on their way to you (that's inherent to generating them
-server-side rather than purely in-browser), and Vercel's own platform-level
-logging/infrastructure is outside this project's control. For production
-credentials, prefer generating on a machine you already trust and storing
-the result in a real secrets manager.
+- Each module renders as a single mounted component at a time. Switching modules in the sidebar unmounts the previous one, discarding its component state, including any generated keys or plaintext.
+- Every module also listens for the page's `visibilitychange` event and proactively clears its sensitive fields the moment the tab is hidden or the user switches away.
+- Raw key bytes are explicitly zero-filled with `.fill(0)` immediately after being encoded to hex, rather than left to garbage collection.
+- Every output field is blurred by default and only reveals its value on an explicit click, reducing shoulder-surfing and accidental screen-share exposure.
 
-## Notes on the design
+## Zero network dependencies
 
-Colors, type, and the "entropy pool" strip at the top of the page are
-described inline in `public/style.css` — deep ink/brass palette, Fraunces
-for display type, JetBrains Mono for keys and hashes, Inter for body copy.
+No analytics, telemetry, or logging libraries are included. No output field, key, or hash is ever sent anywhere; every cryptographic operation runs synchronously or asynchronously in-browser via `crypto.subtle`, `crypto.getRandomValues`, and the bundled `hash-wasm` WebAssembly module.
